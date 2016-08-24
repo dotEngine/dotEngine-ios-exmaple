@@ -7,8 +7,55 @@
 //
 
 #import "ViewController.h"
+#import <AFNetworking.h>
+#import <UIView+Toast.h>
 
-@interface ViewController ()
+
+#import <DOTEngine.h>
+
+#include <stdlib.h>
+
+
+
+@import AVFoundation;
+
+@interface ViewController ()<DotEngineDelegate>
+
+{
+    
+    BOOL connected;
+    NSString * token;
+    
+    BOOL    speekerPhoneMode;
+    BOOL    videoMode;
+    
+}
+
+
+@property (nonatomic,strong) UILabel *roomInfoLabel;
+@property (nonatomic,strong) DOTEngine *dotEngine;
+@property (nonatomic,strong) UIView *localVideoView;
+@property (nonatomic,strong) NSMutableDictionary *remoteVideoViews;
+@property (nonatomic,strong) NSString *userId;
+
+@property (nonatomic,strong) NSString *room;
+
+
+
+
+
+
+
+
+
+@property (weak, nonatomic) IBOutlet UIButton *joinButton;
+@property (weak, nonatomic) IBOutlet UIButton *enableVideoButton;
+
+
+@property (weak, nonatomic) IBOutlet UIButton *muteAudioButton;
+@property (weak, nonatomic) IBOutlet UIButton *speekerModeButton;
+@property (weak, nonatomic) IBOutlet UIButton *previewButton;
+@property (weak, nonatomic) IBOutlet UIButton *cameraSwitchButton;
 
 @end
 
@@ -17,11 +64,568 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
+    
+    
+    self.dotEngine = [DOTEngine sharedInstanceWithDelegate:self];
+    
+    _remoteVideoViews = [NSMutableDictionary dictionary];
+    
+    [self.dotEngine setupVideoProfile:DotEngine_VideoProfile_360P];
+    
+    connected = FALSE;
+    
+    speekerPhoneMode = YES;
+    
+    videoMode = YES;
+    
+    int randomNum = arc4random()  % 1000;
+    
+    self.userId = [NSString stringWithFormat:@"%s%d",[UIDevice currentDevice].name,randomNum];
+    self.room = @"default";
+    
+    [UIApplication sharedApplication].idleTimerDisabled = YES;
+    
+    [self hideMenuButtons];
+    
 }
 
-- (void)didReceiveMemoryWarning {
-    [super didReceiveMemoryWarning];
-    // Dispose of any resources that can be recreated.
+
+
+-(BOOL)prefersStatusBarHidden{
+    
+    return YES;
 }
+
+
+-(void)showMenuButtons{
+    
+    
+    self.muteAudioButton.hidden = NO;
+    self.speekerModeButton.hidden = NO;
+    self.previewButton.hidden = NO;
+    self.cameraSwitchButton.hidden = NO;
+    
+}
+
+
+-(void)hideMenuButtons{
+    
+    
+    self.muteAudioButton.hidden = YES;
+    self.speekerModeButton.hidden = YES;
+    self.previewButton.hidden = YES;
+    self.cameraSwitchButton.hidden = YES;
+    
+    
+}
+
+
+
+-(void)viewWillLayoutSubviews
+{
+    
+    [super viewWillLayoutSubviews];
+    
+    [self layoutVideoViews];
+    
+}
+
+
+
+-(void)layoutVideoViews
+{
+    
+    NSMutableArray *videoViews = [NSMutableArray array];
+    
+    if (self.localVideoView) {
+        
+        [videoViews addObject:self.localVideoView];
+    }
+    
+    [videoViews addObjectsFromArray:[self.remoteVideoViews allValues]];
+    
+    for (int i=0; i < [videoViews count]; i++) {
+        
+        CGRect frame = [self frameAtPosition:i];
+        
+        ((UIView*)videoViews[i]).frame = frame;
+        ((UIView*)videoViews[i]).contentMode =  UIViewContentModeScaleAspectFill;
+        
+    }
+}
+
+
+-(CGRect)frameAtPosition:(int)postion
+{
+    
+    
+    CGRect bounds = self.view.bounds;
+    
+    CGFloat width = bounds.size.width / 3;
+    CGFloat height = bounds.size.width / 3;
+    
+    CGFloat x = (postion%3) * width;
+    CGFloat y = (postion/3) * height;
+    
+    CGRect frame = CGRectMake(x, y, width, height);
+    
+    
+    return frame;
+}
+
+
+
+- (IBAction)connectPress:(id)sender {
+    
+    if (!connected) {
+        
+        [sender setTitle:@"加入中" forState:UIControlStateNormal];
+        
+        [self getDotEngineTokenWithRoom:self.room andUserId:self.userId];
+        
+    } else {
+        
+        [self startDisconnect];
+    }
+    
+    self.joinButton.enabled = false;
+    
+    
+}
+
+
+
+-(void)startDisconnect
+{
+    
+    [self.dotEngine leaveRoom];
+    
+    
+    [self.dotEngine stopPreview];
+    
+    [self.joinButton setTitle:@"离开" forState:UIControlStateNormal];
+    
+    self.joinButton.enabled = NO;
+    
+    
+    
+}
+
+
+- (void)connectWithPermission
+{
+    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL audioGranted) {
+        [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(BOOL videoGranted) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (audioGranted && videoGranted) {
+                    [self connectToRoom];
+                }
+                else {
+                    
+                    [self.view makeToast:@"无法得到音视频权限"];
+                    
+                }
+            });
+        }];
+    }];
+}
+
+
+-(void)connectToRoom{
+    
+    [self.dotEngine startPreview];
+    
+    [self.dotEngine joinRoomWithToken:token];
+    
+    
+    
+}
+
+
+
+
+
+-(void)getDotEngineTokenWithRoom:(NSString*)room andUserId:(NSString*)userId
+{
+    
+    NSString* url = @"http://182.92.152.61:5001/getToken";
+    
+    NSDictionary* parametersDictionary = @{
+                                           @"room":room,
+                                           @"user_id":userId
+                                           };
+    
+    AFHTTPSessionManager *manager = [[AFHTTPSessionManager alloc]initWithSessionConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
+    
+    
+    [manager POST:url parameters:parametersDictionary progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        
+        
+        NSLog(@"responseObject %@",responseObject);
+        
+        if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            
+            token = [responseObject valueForKeyPath:@"d.token"];
+            
+            [self connectWithPermission];
+        }
+        
+        
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        
+        
+        NSLog(@"error: %@", error);
+        
+        [self.joinButton setTitle:@"加入" forState:UIControlStateNormal];
+        
+        self.joinButton.enabled = TRUE;
+        
+        
+        [self.view makeToast:@"can not get token"];
+        
+        
+        
+    }];
+}
+
+
+
+
+
+
+// 开启/关闭静音 只mute 自己
+- (IBAction)muteAudio:(id)sender {
+    
+    BOOL muted = [self.dotEngine isAudioEnable:self.userId];
+    
+    [self.dotEngine enableAudio:!muted];
+    
+    
+    muted = [self.dotEngine isAudioEnable:self.userId];
+    
+    
+    [self.view makeToast:[NSString stringWithFormat:@"mute auido %d",muted]];
+    
+}
+
+
+
+// 扬声器模式
+
+- (IBAction)speekerMode:(id)sender {
+    
+    speekerPhoneMode = !speekerPhoneMode;
+    
+    [self.dotEngine enableSpeakerphone:speekerPhoneMode];
+    
+    [self.view makeToast:[NSString stringWithFormat:@"speekerMode  %d",speekerPhoneMode]];
+}
+
+
+// 视频mute/unmute 开关  先只mute 自己
+- (IBAction)preview:(id)sender {
+    
+    BOOL muted = [self.dotEngine isVideoEnable:self.userId];
+    
+    
+    [self.dotEngine  enableVideo:!muted];
+    
+    
+    muted = [self.dotEngine isVideoEnable:self.userId];
+    
+    [self.view makeToast:[NSString stringWithFormat:@"muted video"]];
+    
+    
+    
+}
+
+
+// 前后摄像头切换
+- (IBAction)cemaraSwitch:(id)sender {
+    
+    [self.dotEngine switchCamera];
+    
+}
+
+
+
+// 音视频模式切换
+
+- (IBAction)enableVideo:(id)sender {
+    
+    videoMode = !videoMode;
+    
+    //TODO
+    
+}
+
+
+
+
+
+
+#pragma delegate
+
+
+
+
+-(void)dotEngine:(DOTEngine *)engine didJoined:(NSString *)userId
+{
+    
+    NSLog(@"didJoined %@",userId);
+    
+    if ([self.userId isEqualToString:userId]) {
+        
+        connected = true;
+        
+        [self.joinButton setTitle:@"离开" forState:UIControlStateNormal];
+        
+        self.joinButton.enabled = true;
+        
+        [self showMenuButtons];
+        
+    }
+    
+    
+    
+}
+
+
+-(void)dotEngine:(DOTEngine *)engine didLeave:(NSString *)userId
+{
+    
+    NSLog(@"didLeave %@",userId);
+    
+    
+    if ([self.userId isEqualToString:userId]) {
+        
+        [self.joinButton setTitle:@"加入" forState:UIControlStateNormal];
+        
+        self.joinButton.enabled = true;
+        
+        connected = false;
+        
+        
+        [self hideMenuButtons];
+        
+    }
+    
+}
+
+
+
+
+/**
+ *  有视图加入 已经有视频进来了
+ *
+ *  @param engine <#engine description#>
+ *  @param view   <#view description#>
+ *  @param userId <#userId description#>
+ */
+-(void)dotEngine:(DOTEngine *)engine didAddView:(UIView *)view withUser:(NSString *)userId
+{
+    
+    NSLog(@"didAddView");
+    
+    if (view == nil) {
+        return;
+    }
+    
+    // this is local
+    if ([self.userId isEqualToString:userId]) {
+        
+        _localVideoView = view;
+        
+        if (_localVideoView != nil ) {
+            
+            [self.view addSubview:_localVideoView];
+        }
+        
+        
+        
+    } else {
+        
+        
+        [self.view addSubview:view];
+        
+        [self.remoteVideoViews setObject:view forKey:userId];
+        
+        [self.view setNeedsLayout];
+        
+        
+    }
+    
+}
+
+
+
+/**
+ *  有视图被remove掉
+ *
+ *  @param engine <#engine description#>
+ *  @param view   <#view description#>
+ *  @param userId <#userId description#>
+ */
+-(void)dotEngine:(DOTEngine *)engine didRemoveView:(UIView *)view withUser:(NSString *)userId
+{
+    
+    
+    NSLog(@"didRemoveView");
+    
+    if ([self.userId isEqualToString:userId]) {
+        
+        if (self.localVideoView) {
+            
+            [self.localVideoView removeFromSuperview];
+            
+            self.localVideoView = nil;
+        }
+        
+    }  else {
+        
+        if ([self.remoteVideoViews objectForKey:userId]) {
+            
+            [view removeFromSuperview];
+            
+            [self.remoteVideoViews removeObjectForKey:userId];
+            
+            [self.view setNeedsLayout];
+            
+        }
+        
+    }
+    
+    
+}
+
+
+
+
+//  add stream
+-(void)dotEngine:(DOTEngine *)engine didAddStream:(NSString *)userId
+{
+    
+    NSLog(@"didAddStream: %@",userId);
+    
+    if ([self.userId isEqualToString:userId]) {
+        
+        connected = true;
+        
+        [self.joinButton setTitle:@"离开" forState:UIControlStateNormal];
+        
+        self.joinButton.enabled = true;
+        
+        
+        [self showMenuButtons];
+        
+        
+    }
+    
+    
+}
+
+
+// remove stream
+-(void)dotEngine:(DOTEngine *)engine didRemoveStream:(NSString *)userId
+{
+    
+    NSLog(@"didRemoveStream: %@",userId);
+}
+
+
+
+-(void)dotEngine:(DOTEngine *)engine didEnableVideo:(BOOL)enable userId:(NSString *)userId
+{
+    
+    NSLog(@"didEnableVideo");
+    
+    NSString* content;
+    
+    if ([userId isEqualToString:self.userId]) {
+        content = [NSString stringWithFormat:@"本地用户 %s  视频发生改变  %s",userId, enable? @"开启" : @"关闭"];
+    } else {
+        content = [NSString stringWithFormat:@"远程用户 %s 视频发生改变 %s",userId, enable ? @"开启" : @"关闭"];
+    }
+    
+    [self.view makeToast:content];
+    
+    // 可以进行其他更多的操作  比如替换试图等操作
+}
+
+
+
+-(void)dotEngine:(DOTEngine *)engine didEnableAudio:(BOOL)enable userId:(NSString *)userId
+{
+    
+    NSLog(@"didEnableAudio");
+    
+    NSString* content;
+    
+    if ([userId isEqualToString:self.userId]) {
+        content = [NSString stringWithFormat:@"本地用户 %s  音频发生改变  %s",userId, enable? @"开启" : @"关闭"];
+    } else {
+        content = [NSString stringWithFormat:@"远程用户 %s  音频发生改变 %s",userId, enable ? @"开启" : @"关闭"];
+    }
+    
+    [self.view makeToast:content];
+    
+    
+    // 可以进行其他更多的操作  比如修改是否显示音频的状态
+    
+}
+
+
+
+-(void)dotEngine:(DOTEngine *)engine didOccurError:(int)errorCode
+{
+    
+    NSLog(@"didOccurError");
+    
+    
+    [self.view makeToast:@"didOccurError"];
+    
+    
+}
+
+
+
 
 @end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

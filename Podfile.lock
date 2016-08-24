@@ -14,14 +14,26 @@ PODS:
   - AFNetworking/Serialization (3.1.0)
   - AFNetworking/UIKit (3.1.0):
     - AFNetworking/NSURLSession
+  - libdotEngine (0.1.0)
   - Toast (3.0)
 
 DEPENDENCIES:
   - AFNetworking
+  - libdotEngine (from `https://github.com/dotEngine/dotEngine-ios-sdk.git`)
   - Toast
+
+EXTERNAL SOURCES:
+  libdotEngine:
+    :git: https://github.com/dotEngine/dotEngine-ios-sdk.git
+
+CHECKOUT OPTIONS:
+  libdotEngine:
+    :commit: 7d3b7b7c05ac6c55a4d0b7bbe995a8ba0505e928
+    :git: https://github.com/dotEngine/dotEngine-ios-sdk.git
 
 SPEC CHECKSUMS:
   AFNetworking: 5e0e199f73d8626b11e79750991f5d173d1f8b67
+  libdotEngine: 4b51aa01c28d6b85cac2af8aca137c29c34fa229
   Toast: 32c59229abfcf41850162b83bb9259dc84372473
 
 COCOAPODS: 0.39.0
