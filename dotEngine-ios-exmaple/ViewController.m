@@ -17,6 +17,7 @@
 
 
 
+
 @import AVFoundation;
 
 @interface ViewController ()<DotEngineDelegate>
@@ -24,7 +25,7 @@
 {
     
     BOOL connected;
-    NSString * token;
+    NSString* _token;
     
     BOOL    speekerPhoneMode;
     BOOL    videoMode;
@@ -33,31 +34,25 @@
 
 
 @property (nonatomic,strong) UILabel *roomInfoLabel;
-@property (nonatomic,strong) DOTEngine *dotEngine;
+@property (nonatomic,strong) DotEngine *dotEngine;
 @property (nonatomic,strong) UIView *localVideoView;
 @property (nonatomic,strong) NSMutableDictionary *remoteVideoViews;
 @property (nonatomic,strong) NSString *userId;
-
 @property (nonatomic,strong) NSString *room;
-
-
-
-
-
-
-
-
-
 @property (weak, nonatomic) IBOutlet UIButton *joinButton;
 @property (weak, nonatomic) IBOutlet UIButton *enableVideoButton;
-
-
 @property (weak, nonatomic) IBOutlet UIButton *muteAudioButton;
 @property (weak, nonatomic) IBOutlet UIButton *speekerModeButton;
 @property (weak, nonatomic) IBOutlet UIButton *previewButton;
 @property (weak, nonatomic) IBOutlet UIButton *cameraSwitchButton;
 
 @end
+
+
+static  NSString*  APP_KEY = @"45";
+static  NSString*  APP_SECRET = @"dc5cabddba054ffe894ba79c2910866c";
+static  NSString*  ROOM = @"dotcc";
+
 
 @implementation ViewController
 
@@ -66,7 +61,7 @@
     // Do any additional setup after loading the view, typically from a nib.
     
     
-    self.dotEngine = [DOTEngine sharedInstanceWithDelegate:self];
+    self.dotEngine = [DotEngine sharedInstanceWithDelegate:self];
     
     _remoteVideoViews = [NSMutableDictionary dictionary];
     
@@ -80,8 +75,8 @@
     
     int randomNum = arc4random()  % 1000;
     
-    self.userId = [NSString stringWithFormat:@"%s%d",[UIDevice currentDevice].name,randomNum];
-    self.room = @"default";
+    self.userId = [NSString stringWithFormat:@"%@%d",[UIDevice currentDevice].name,randomNum];
+    self.room = ROOM;
     
     [UIApplication sharedApplication].idleTimerDisabled = YES;
     
@@ -201,7 +196,7 @@
     [self.dotEngine leaveRoom];
     
     
-    [self.dotEngine stopPreview];
+    [self.dotEngine stopLocalMedia];
     
     [self.joinButton setTitle:@"离开" forState:UIControlStateNormal];
     
@@ -233,9 +228,9 @@
 
 -(void)connectToRoom{
     
-    [self.dotEngine startPreview];
+    [self.dotEngine startLocalMedia];
     
-    [self.dotEngine joinRoomWithToken:token];
+    [self.dotEngine joinRoomWithToken:_token];
     
     
     
@@ -248,44 +243,28 @@
 -(void)getDotEngineTokenWithRoom:(NSString*)room andUserId:(NSString*)userId
 {
     
-    NSString* url = @"http://182.92.152.61:5001/getToken";
     
-    NSDictionary* parametersDictionary = @{
-                                           @"room":room,
-                                           @"user_id":userId
-                                           };
+    [self.dotEngine generateTestTokenWithAppKey:APP_KEY
+                                      appsecret:APP_SECRET
+                                           room:room
+                                         userId:userId
+                                      withBlock:^(NSString *token, NSError *error) {
+                                          
+                                          if (error) {
+                                              [self.joinButton setTitle:@"加入" forState:UIControlStateNormal];
+                                              self.joinButton.enabled = TRUE;
+                                              [self.view makeToast:@"can not get token"];
+                                              
+                                          } else {
+                                              
+                                              _token = token;
+                                              
+                                              [self connectWithPermission];
+                                              
+                                          }
+                                          
+                                      }];
     
-    AFHTTPSessionManager *manager = [[AFHTTPSessionManager alloc]initWithSessionConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
-    
-    
-    [manager POST:url parameters:parametersDictionary progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-        
-        
-        NSLog(@"responseObject %@",responseObject);
-        
-        if ([responseObject isKindOfClass:[NSDictionary class]]) {
-            
-            token = [responseObject valueForKeyPath:@"d.token"];
-            
-            [self connectWithPermission];
-        }
-        
-        
-    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-        
-        
-        NSLog(@"error: %@", error);
-        
-        [self.joinButton setTitle:@"加入" forState:UIControlStateNormal];
-        
-        self.joinButton.enabled = TRUE;
-        
-        
-        [self.view makeToast:@"can not get token"];
-        
-        
-        
-    }];
 }
 
 
@@ -297,13 +276,8 @@
 - (IBAction)muteAudio:(id)sender {
     
     BOOL muted = [self.dotEngine isAudioEnable:self.userId];
-    
     [self.dotEngine enableAudio:!muted];
-    
-    
     muted = [self.dotEngine isAudioEnable:self.userId];
-    
-    
     [self.view makeToast:[NSString stringWithFormat:@"mute auido %d",muted]];
     
 }
@@ -369,7 +343,7 @@
 
 
 
--(void)dotEngine:(DOTEngine *)engine didJoined:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didJoined:(NSString *)userId
 {
     
     NSLog(@"didJoined %@",userId);
@@ -391,7 +365,7 @@
 }
 
 
--(void)dotEngine:(DOTEngine *)engine didLeave:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didLeave:(NSString *)userId
 {
     
     NSLog(@"didLeave %@",userId);
@@ -422,7 +396,7 @@
  *  @param view   <#view description#>
  *  @param userId <#userId description#>
  */
--(void)dotEngine:(DOTEngine *)engine didAddView:(UIView *)view withUser:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didAddView:(UIView *)view withUser:(NSString *)userId
 {
     
     NSLog(@"didAddView");
@@ -466,7 +440,7 @@
  *  @param view   <#view description#>
  *  @param userId <#userId description#>
  */
--(void)dotEngine:(DOTEngine *)engine didRemoveView:(UIView *)view withUser:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didRemoveView:(UIView *)view withUser:(NSString *)userId
 {
     
     
@@ -502,7 +476,7 @@
 
 
 //  add stream
--(void)dotEngine:(DOTEngine *)engine didAddStream:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didAddStream:(NSString *)userId
 {
     
     NSLog(@"didAddStream: %@",userId);
@@ -526,7 +500,7 @@
 
 
 // remove stream
--(void)dotEngine:(DOTEngine *)engine didRemoveStream:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didRemoveStream:(NSString *)userId
 {
     
     NSLog(@"didRemoveStream: %@",userId);
@@ -534,7 +508,7 @@
 
 
 
--(void)dotEngine:(DOTEngine *)engine didEnableVideo:(BOOL)enable userId:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didEnableVideo:(BOOL)enable userId:(NSString *)userId
 {
     
     NSLog(@"didEnableVideo");
@@ -542,9 +516,9 @@
     NSString* content;
     
     if ([userId isEqualToString:self.userId]) {
-        content = [NSString stringWithFormat:@"本地用户 %s  视频发生改变  %s",userId, enable? @"开启" : @"关闭"];
+        content = [NSString stringWithFormat:@"本地用户 %@  视频发生改变  %@",userId, enable? @"开启" : @"关闭"];
     } else {
-        content = [NSString stringWithFormat:@"远程用户 %s 视频发生改变 %s",userId, enable ? @"开启" : @"关闭"];
+        content = [NSString stringWithFormat:@"远程用户 %@ 视频发生改变 %@",userId, enable ? @"开启" : @"关闭"];
     }
     
     [self.view makeToast:content];
@@ -554,7 +528,7 @@
 
 
 
--(void)dotEngine:(DOTEngine *)engine didEnableAudio:(BOOL)enable userId:(NSString *)userId
+-(void)dotEngine:(DotEngine *)engine didEnableAudio:(BOOL)enable userId:(NSString *)userId
 {
     
     NSLog(@"didEnableAudio");
@@ -562,9 +536,9 @@
     NSString* content;
     
     if ([userId isEqualToString:self.userId]) {
-        content = [NSString stringWithFormat:@"本地用户 %s  音频发生改变  %s",userId, enable? @"开启" : @"关闭"];
+        content = [NSString stringWithFormat:@"本地用户 %@  音频发生改变  %@",userId, enable? @"开启" : @"关闭"];
     } else {
-        content = [NSString stringWithFormat:@"远程用户 %s  音频发生改变 %s",userId, enable ? @"开启" : @"关闭"];
+        content = [NSString stringWithFormat:@"远程用户 %@  音频发生改变 %@",userId, enable ? @"开启" : @"关闭"];
     }
     
     [self.view makeToast:content];
@@ -576,7 +550,7 @@
 
 
 
--(void)dotEngine:(DOTEngine *)engine didOccurError:(int)errorCode
+-(void)dotEngine:(DotEngine *)engine didOccurError:(DotEngineErrorCode)errorCode
 {
     
     NSLog(@"didOccurError");
