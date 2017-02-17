@@ -156,14 +156,13 @@ static  NSString*  ROOM = @"dotcc";
     
     CGRect bounds = self.view.bounds;
     
-    CGFloat width = bounds.size.width / 3;
-    CGFloat height = bounds.size.width / 3;
+    CGFloat width = bounds.size.width / 2;
+    CGFloat height = bounds.size.width / 2;
     
-    CGFloat x = (postion%3) * width;
-    CGFloat y = (postion/3) * height;
+    CGFloat x = (postion%2) * width;
+    CGFloat y = (postion/2) * height;
     
     CGRect frame = CGRectMake(x, y, width, height);
-    
     
     return frame;
 }
@@ -390,43 +389,30 @@ static  NSString*  ROOM = @"dotcc";
 
 
 /**
- *  有视图加入 已经有视频进来了
- *
- *  @param engine <#engine description#>
- *  @param view   <#view description#>
- *  @param userId <#userId description#>
+ <#Description#>
+ 
+ @param engine <#engine description#>
+ @param view   <#view description#>
  */
--(void)dotEngine:(DotEngine *)engine didAddView:(UIView *)view withUser:(NSString *)userId
+-(void)dotEngine:(DotEngine*) engine  didAddLocalView:(UIView*)view
 {
     
-    NSLog(@"didAddView");
     
-    if (view == nil) {
-        return;
-    }
+    connected = true;
     
-    // this is local
-    if ([self.userId isEqualToString:userId]) {
+    [self.joinButton setTitle:@"离开" forState:UIControlStateNormal];
+    
+    self.joinButton.enabled = true;
+    
+    
+    [self showMenuButtons];
+    
+    
+    _localVideoView = view;
+    
+    if (_localVideoView != nil ) {
         
-        _localVideoView = view;
-        
-        if (_localVideoView != nil ) {
-            
-            [self.view addSubview:_localVideoView];
-        }
-        
-        
-        
-    } else {
-        
-        
-        [self.view addSubview:view];
-        
-        [self.remoteVideoViews setObject:view forKey:userId];
-        
-        [self.view setNeedsLayout];
-        
-        
+        [self.view addSubview:_localVideoView];
     }
     
 }
@@ -434,77 +420,67 @@ static  NSString*  ROOM = @"dotcc";
 
 
 /**
- *  有视图被remove掉
- *
- *  @param engine <#engine description#>
- *  @param view   <#view description#>
- *  @param userId <#userId description#>
+ <#Description#>
+ 
+ @param engine <#engine description#>
+ @param view   <#view description#>
+ @param userId <#userId description#>
  */
--(void)dotEngine:(DotEngine *)engine didRemoveView:(UIView *)view withUser:(NSString *)userId
+-(void)dotEngine:(DotEngine*) engine  didAddRemoteView:(UIView*)view withUser:(NSString*)userId
 {
     
+    [self.view addSubview:view];
     
-    NSLog(@"didRemoveView");
+    [self.remoteVideoViews setObject:view forKey:userId];
     
-    if ([self.userId isEqualToString:userId]) {
+    [self.view setNeedsLayout];
+    
+}
+
+
+/**
+ <#Description#>
+ 
+ @param engine <#engine description#>
+ @param view   <#view description#>
+ */
+-(void)dotEngine:(DotEngine*) engine didRemoveLocalView:(UIView*)view
+{
+    
+    if (self.localVideoView) {
         
-        if (self.localVideoView) {
-            
-            [self.localVideoView removeFromSuperview];
-            
-            self.localVideoView = nil;
-        }
+        [self.localVideoView removeFromSuperview];
         
-    }  else {
-        
-        if ([self.remoteVideoViews objectForKey:userId]) {
-            
-            [view removeFromSuperview];
-            
-            [self.remoteVideoViews removeObjectForKey:userId];
-            
-            [self.view setNeedsLayout];
-            
-        }
-        
+        self.localVideoView = nil;
     }
     
-    
 }
 
 
 
-
-//  add stream
--(void)dotEngine:(DotEngine *)engine didAddStream:(NSString *)userId
+/**
+ <#Description#>
+ 
+ @param engine <#engine description#>
+ @param view   <#view description#>
+ @param userId <#userId description#>
+ */
+-(void)dotEngine:(DotEngine*) engine didRemoveRemoteView:(UIView*)view withUser:(NSString*)userId
 {
     
-    NSLog(@"didAddStream: %@",userId);
-    
-    if ([self.userId isEqualToString:userId]) {
+    if ([self.remoteVideoViews objectForKey:userId]) {
         
-        connected = true;
+        [view removeFromSuperview];
         
-        [self.joinButton setTitle:@"离开" forState:UIControlStateNormal];
+        [self.remoteVideoViews removeObjectForKey:userId];
         
-        self.joinButton.enabled = true;
-        
-        
-        [self showMenuButtons];
-        
+        [self.view setNeedsLayout];
         
     }
-    
-    
 }
 
 
-// remove stream
--(void)dotEngine:(DotEngine *)engine didRemoveStream:(NSString *)userId
-{
-    
-    NSLog(@"didRemoveStream: %@",userId);
-}
+
 
 
 

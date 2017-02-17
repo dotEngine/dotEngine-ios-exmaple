@@ -41,5 +41,9 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Need microphone access for video call </string>
+    <key>NSCameraUsageDescription</key>
+    <string>Need camera access for video call </string>
 </dict>
 </plist>
